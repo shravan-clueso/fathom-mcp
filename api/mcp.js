@@ -1,38 +1,48 @@
-import express from "express";
 import axios from "axios";
-import { createMcpServer } from "@modelcontextprotocol/sdk";
 
-const app = express();
+export default async function handler(req, res) {
+  const FATHOM_API_KEY = process.env.FATHOM_API_KEY;
 
-const FATHOM_API_KEY = process.env.FATHOM_API_KEY;
-
-async function fathomRequest(endpoint) {
-  const response = await axios.get(`https://api.fathom.video/v1/${endpoint}`, {
-    headers: {
-      Authorization: `Bearer ${FATHOM_API_KEY}`,
-      "Content-Type": "application/json"
-    }
-  });
-  return response.data;
-}
-
-const server = createMcpServer({
-  tools: {
-    async list_meetings() {
-      return await fathomRequest("meetings");
-    },
-    async get_meeting({ meetingId }) {
-      return await fathomRequest(`meetings/${meetingId}`);
-    },
-    async get_transcript({ meetingId }) {
-      return await fathomRequest(`meetings/${meetingId}/transcript`);
-    },
-    async get_summary({ meetingId }) {
-      return await fathomRequest(`meetings/${meetingId}/summary`);
-    }
+  if (!FATHOM_API_KEY) {
+    return res.status(500).json({ error: "Missing FATHOM_API_KEY" });
   }
-});
 
-app.use("/api/mcp", server);
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
 
-export default app;
+  const { tool, arguments: args } = req.body;
+
+  try {
+    if (tool === "list_meetings") {
+      const response = await axios.get(
+        "https://api.fathom.video/v1/meetings",
+        {
+          headers: {
+            Authorization: `Bearer ${FATHOM_API_KEY}`
+          }
+        }
+      );
+      return res.status(200).json(response.data);
+    }
+
+    if (tool === "get_meeting") {
+      const response = await axios.get(
+        `https://api.fathom.video/v1/meetings/${args.meetingId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${FATHOM_API_KEY}`
+          }
+        }
+      );
+      return res.status(200).json(response.data);
+    }
+
+    return res.status(400).json({ error: "Unknown tool" });
+
+  } catch (error) {
+    return res.status(500).json({
+      error: error.response?.data || error.message
+    });
+  }
+}
